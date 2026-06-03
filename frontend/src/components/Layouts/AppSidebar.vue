@@ -71,6 +71,10 @@
     </div>
     <div class="m-2 flex flex-col gap-1">
       <div class="flex flex-col gap-2 mb-1">
+        <SalesHierarchyBanner
+          v-if="showSalesHierarchyBanner"
+          :isSidebarCollapsed="isSidebarCollapsed"
+        />
         <SignupBanner
           v-if="isDemoSite"
           :isSidebarCollapsed="isSidebarCollapsed"
@@ -86,6 +90,17 @@
           :isSidebarCollapsed="isSidebarCollapsed"
         />
       </div>
+      <SidebarLink
+        v-if="isManager() && isDemoDataCreated"
+        class="text-ink-red-3 hover:bg-surface-red-2 focus:bg-surface-red-2"
+        :label="__('Clear Demo Data')"
+        :isCollapsed="isSidebarCollapsed"
+        @click="() => clearDemoData()"
+      >
+        <template #icon>
+          <BrushCleaningIcon class="h-4 w-4" />
+        </template>
+      </SidebarLink>
       <SidebarLink
         v-if="isOnboardingStepsCompleted"
         :label="__('Help')"
@@ -138,6 +153,7 @@
 </template>
 
 <script setup>
+import BrushCleaningIcon from '~icons/lucide/brush-cleaning'
 import LucideLayoutDashboard from '~icons/lucide/layout-dashboard'
 import CRMLogo from '@/components/Icons/CRMLogo.vue'
 import InviteIcon from '@/components/Icons/InviteIcon.vue'
@@ -162,6 +178,7 @@ import HelpIcon from '@/components/Icons/HelpIcon.vue'
 import SidebarLink from '@/components/SidebarLink.vue'
 import Notifications from '@/components/Notifications.vue'
 import Settings from '@/components/Settings/Settings.vue'
+import SalesHierarchyBanner from '@/components/SalesHierarchyBanner.vue'
 import { viewsStore } from '@/stores/views'
 import {
   unreadNotificationsCount,
@@ -171,6 +188,7 @@ import { usersStore } from '@/stores/users'
 import { sessionStore } from '@/stores/session'
 import { showSettings, activeSettingsPage } from '@/composables/settings'
 import { showChangePasswordModal } from '@/composables/modals'
+import { useBroadcast } from '@/composables/useBroadcast.js'
 import { FeatherIcon, call } from 'frappe-ui'
 import {
   SignupBanner,
@@ -185,16 +203,20 @@ import {
 } from 'frappe-ui/frappe'
 import router from '@/router'
 import { useStorage } from '@vueuse/core'
+import { useDemoData } from '@/composables/demoData'
 import { ref, reactive, computed, markRaw, onMounted } from 'vue'
 
 const { getPinnedViews, getPublicViews } = viewsStore()
 const { toggle: toggleNotificationPanel } = notificationsStore()
 const { capture } = useTelemetry()
+const { clearDemoData, isDemoDataCreated } = useDemoData()
+const { send } = useBroadcast()
 
 const isSidebarCollapsed = useStorage('isSidebarCollapsed', false)
 
 const isFCSite = ref(window.is_fc_site)
 const isDemoSite = ref(window.is_demo_site)
+const showSalesHierarchyBanner = ref(!!window.show_sales_hierarchy_banner)
 
 const links = [
   {
@@ -346,6 +368,7 @@ const steps = reactive([
     onClick: () => {
       minimize.value = true
       router.push({ name: 'Leads' })
+      send('trigger_lead_create', true)
       capture('onboarding_step_clicked_create_first_lead')
     },
   },

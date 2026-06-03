@@ -191,6 +191,7 @@ const emailEmpty = computed(() => {
 })
 
 async function sendMail() {
+  let fromEmail = newEmailEditor.value.fromEmail || getUser().email
   let recipients = newEmailEditor.value.toEmails
   let subject = newEmailEditor.value.subject
   let cc = newEmailEditor.value.ccEmails || []
@@ -209,7 +210,7 @@ async function sendMail() {
     doctype: props.doctype,
     name: doc.value.name,
     send_email: 1,
-    sender: getUser().email,
+    sender: fromEmail,
     sender_full_name: getUser()?.full_name || undefined,
   })
 }
@@ -255,7 +256,7 @@ async function submitEmail() {
   showEmailBox.value = false
   await toast.promise(sendMail(), {
     loading: __('Sending email...'),
-    success: __('Email sent!'),
+    success: __('Email sent'),
     error: (e) => e?.messages?.[0] || __('Failed to send email!'),
   })
   newEmail.value = ''
@@ -271,7 +272,7 @@ async function submitComment() {
   showCommentBox.value = false
   await toast.promise(sendComment(), {
     loading: __('Sending comment...'),
-    success: __('Comment sent!'),
+    success: __('Comment sent'),
     error: (e) => e?.messages?.[0] || __('Failed to send comment!'),
   })
   newComment.value = ''

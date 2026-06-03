@@ -2,7 +2,7 @@
 # For license information, please see license.txt
 
 import frappe
-from frappe import _
+from frappe import _, generate_hash
 from frappe.model.document import Document
 
 from crm.integrations.api import get_contact_by_phone_number
@@ -27,7 +27,7 @@ class CRMCallLog(Document):
 		medium: DF.Data | None
 		note: DF.Link | None
 		receiver: DF.Link | None
-		recording_url: DF.Data | None
+		recording_url: DF.SmallText | None
 		reference_docname: DF.DynamicLink | None
 		reference_doctype: DF.Link | None
 		start_time: DF.Datetime | None
@@ -46,6 +46,12 @@ class CRMCallLog(Document):
 		to: DF.Data
 		type: DF.Literal["Incoming", "Outgoing"]
 	# end: auto-generated types
+
+	def before_insert(self):
+		if not self.id:
+			self.id = generate_hash(length=12)
+		if not self.telephony_medium:
+			self.telephony_medium = "Manual"
 
 	@staticmethod
 	def default_list_data():
@@ -132,6 +138,14 @@ class CRMCallLog(Document):
 
 		self.append("links", {"link_doctype": reference_doctype, "link_name": reference_name})
 
+	def as_dict(self, *args, **kwargs):
+		d = super().as_dict(*args, **kwargs)
+		if d.get("recording_url"):
+			d["recording_url_path"] = (
+				f"/api/method/crm.integrations.api.get_recording_url?call_log_name={d.get('name')}"
+			)
+		return d
+
 
 def parse_call_log(call):
 	call["show_recording"] = False
@@ -188,6 +202,7 @@ def get_call_log(name: str):
 			"to",
 			"note",
 			"recording_url",
+			"recording_url_path",
 			"reference_doctype",
 			"reference_docname",
 			"creation",

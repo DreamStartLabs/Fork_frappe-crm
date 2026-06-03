@@ -1,18 +1,31 @@
 import frappe
+import requests
+from frappe import _
 from frappe.query_builder import Order
 from pypika.functions import Replace
+from werkzeug.wrappers import Response
 
 from crm.utils import are_same_phone_number, parse_phone_number
 
 
+def _get_recording_credentials(telephony_medium: str) -> tuple:
+	"""Return (api_key, secret) for the given telephony medium."""
+	if telephony_medium == "Twilio":
+		s = frappe.get_single("CRM Twilio Settings")
+		return s.api_key, s.get_password("api_secret")
+	elif telephony_medium == "Exotel":
+		s = frappe.get_single("CRM Exotel Settings")
+		return s.api_key, s.get_password("api_token")
+	frappe.throw(_("Unknown telephony medium: {0}").format(telephony_medium))
+
+
 @frappe.whitelist()
 def is_call_integration_enabled():
-	twilio_enabled = frappe.db.get_single_value("CRM Twilio Settings", "enabled")
-	exotel_enabled = frappe.db.get_single_value("CRM Exotel Settings", "enabled")
-
 	return {
-		"twilio_enabled": twilio_enabled,
-		"exotel_enabled": exotel_enabled,
+		"integrations": {
+			"twilio": bool(frappe.db.get_single_value("CRM Twilio Settings", "enabled")),
+			"exotel": bool(frappe.db.get_single_value("CRM Exotel Settings", "enabled")),
+		},
 		"default_calling_medium": get_user_default_calling_medium(),
 	}
 
@@ -104,10 +117,8 @@ def add_task_to_call_log(call_sid: str, task: dict):
 	return _task
 
 
-frappe.whitelist()
-
-
-def get_contact_lead_or_deal_from_number(number):
+@frappe.whitelist()
+def get_contact_lead_or_deal_from_number(number: str):
 	"""Get contact, lead or deal from the given number."""
 	contact = get_contact_by_phone_number(number)
 	if contact.get("name"):
@@ -134,7 +145,27 @@ def get_contact_by_phone_number(phone_number: str):
 		return get_contact(phone_number, number.get("country"), exact_match=True)
 
 
-def get_contact(phone_number, country="IN", exact_match=False):
+@frappe.whitelist()
+def get_recording_url(call_log_name: str):
+	"""Fetch and stream a call recording, authenticating with the provider's credentials."""
+	if not call_log_name or not frappe.db.exists("CRM Call Log", call_log_name):
+		frappe.throw(_("Call log not found"), frappe.DoesNotExistError)
+
+	log = frappe.get_doc("CRM Call Log", call_log_name)
+
+	if not log.recording_url:
+		frappe.throw(_("Recording URL not found"), frappe.DoesNotExistError)
+
+	auth = _get_recording_credentials(log.telephony_medium)
+	with requests.get(log.recording_url, auth=auth, stream=True, timeout=10) as r:
+		r.raise_for_status()
+		response = Response()
+		response.data = r.content
+		response.mimetype = "audio/mpeg"
+	return response
+
+
+def get_contact(phone_number: str, country: str = "IN", exact_match: bool = False):
 	if not phone_number:
 		return {"mobile_no": phone_number}
 
